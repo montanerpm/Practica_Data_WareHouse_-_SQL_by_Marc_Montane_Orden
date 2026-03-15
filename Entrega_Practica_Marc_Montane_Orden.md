@@ -234,3 +234,300 @@ from final
 where rn = 1;
 ```
 
+## Enunciado 5
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            local_departure,
+            local_actual_departure,
+            local_arrival,
+            local_actual_arrival,
+            gmt_departure,
+            gmt_actual_departure,
+            gmt_arrival,
+            gmt_actual_arrival,
+            departure_airport,
+            arrival_airport,
+            airline_code,
+            delay_mins,
+            arrival_status,
+            created_at,
+            updated_at
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            local_departure,
+            local_actual_departure,
+            local_arrival,
+            local_actual_arrival,
+            gmt_departure,
+            gmt_actual_departure,
+            gmt_arrival,
+            gmt_actual_arrival,
+            departure_airport,
+            arrival_airport,
+            airline_code,
+            delay_mins,
+            arrival_status,
+            created_at,
+            updated_at,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        local_departure,
+        local_actual_departure,
+        local_arrival,
+        local_actual_arrival,
+        gmt_departure,
+        gmt_actual_departure,
+        gmt_arrival,
+        gmt_actual_arrival,
+        departure_airport,
+        arrival_airport,
+        airline_code,
+        delay_mins,
+        arrival_status,
+        created_at,
+        updated_at
+    from final
+    where rn = 1
+),
+effective_flights as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        local_departure,
+        local_actual_departure,
+        local_arrival,
+        local_actual_arrival,
+        created_at,
+        coalesce(local_departure, created_at) as effective_local_departure,
+        coalesce(local_actual_departure, local_departure, created_at) as effective_local_actual_departure,
+        coalesce(local_arrival, created_at) as effective_local_arrival,
+        coalesce(local_actual_arrival, local_arrival, created_at) as effective_local_actual_arrival
+    from last_flights_status
+)
+select 
+    flight_row_id,
+    unique_identifier,
+    local_departure,
+    local_actual_departure,
+    local_arrival,
+    local_actual_arrival,
+    created_at,
+    effective_local_departure,
+    effective_local_actual_departure,
+    effective_local_arrival,
+    effective_local_actual_arrival
+from effective_flights;
+```
+
+## Enunciado 6
+### 1. Qué estados de vuelo existen
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            local_departure,
+            local_actual_departure,
+            local_arrival,
+            local_actual_arrival,
+            gmt_departure,
+            gmt_actual_departure,
+            gmt_arrival,
+            gmt_actual_arrival,
+            departure_airport,
+            arrival_airport,
+            airline_code,
+            delay_mins,
+            arrival_status,
+            created_at,
+            updated_at
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            local_departure,
+            local_actual_departure,
+            local_arrival,
+            local_actual_arrival,
+            gmt_departure,
+            gmt_actual_departure,
+            gmt_arrival,
+            gmt_actual_arrival,
+            departure_airport,
+            arrival_airport,
+            airline_code,
+            delay_mins,
+            arrival_status,
+            created_at,
+            updated_at,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        arrival_status
+    from final
+    where rn = 1
+)
+select distinct
+    arrival_status
+from last_flights_status
+order by arrival_status asc;
+```
+
+Los estados que existen son: CX (Cancelled), DY (Delayed), EY (Early), NS (Not scheduled) y OT (On time)
+
+### 2. Cuántos vuelos hay por cada estado
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            arrival_status
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            arrival_status,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        arrival_status
+    from final
+    where rn = 1
+)
+
+select 
+    arrival_status,
+    count(*) as total_vuelos
+from last_flights_status
+group by arrival_status
+order by total_vuelos desc;
+```
+
+Los numeros de vuelos por estado son: CX (Cancelled) 5 vuelos, DY (Delayed) 143 vuelos, EY (Early) 9 vuelos, NS (Not scheduled) 3 vuelos y OT (On time) 95 vuelos.
+
+## Enunciado 7
+### 1. De qué país despegan los vuelos
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            arrival_airport
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            arrival_airport,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        departure_airport,
+        arrival_airport
+    from final
+    where rn = 1
+)
+
+select 
+    f.unique_identifier,
+    f.departure_airport,
+    a1.city as departure_city,
+    a1.country as departure_country,
+    f.arrival_airport,
+    a2.city as arrival_city,
+    a2.country as arrival_country
+from last_flights_status f
+left join airports a1
+    on f.departure_airport = a1.airport_code
+left join airports a2
+    on f.arrival_airport = a2.airport_code;
+```
+
+### 2. Cuántos vuelos despegan por país
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            arrival_airport
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            arrival_airport,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        departure_airport,
+        arrival_airport
+    from final
+    where rn = 1
+)
+
+select 
+    a.country,
+    count(*) as total_vuelos
+from last_flights_status f
+left join airports a
+    on f.arrival_airport = a.airport_code
+group by a.country
+order by total_vuelos desc;
+```
+
+En españa despegan 128 vuelos, de estados unidos 43, de Paises Bajos 31 y de reino unido 1.
+
+
