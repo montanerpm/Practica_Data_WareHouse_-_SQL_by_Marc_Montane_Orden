@@ -129,7 +129,6 @@ order by total_created_at_distintos desc, total_registros desc;
 ```
 Para la mayoria de casos, la información es unica, aunque hay algunos vuelos donde en todos los registros, el campo "created_at" es NULL. En concreto, de los 266 vuelos, 43 tienen la columna "created_at" en NULL.
 
-## Enunciado 3
 ### 2. La información de updated_at deber ser igual o más que la información de created_at, lo que nos indica coherencia y consistencia
 ```sql
 with base as (
