@@ -163,3 +163,74 @@ from info_validacion
 order by total_registros desc;
 ```
 Todos los registros de "update_at" son iguales o más que los de "created_at" exceptuando cuando los registros de ambos son NULL.
+
+## Enunciado 4
+```sql
+with base as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        local_departure,
+        local_actual_departure,
+        local_arrival,
+        local_actual_arrival,
+        gmt_departure,
+        gmt_actual_departure,
+        gmt_arrival,
+        gmt_actual_arrival,
+        departure_airport,
+        arrival_airport,
+        airline_code,
+        delay_mins,
+        arrival_status,
+        created_at,
+        updated_at
+    from flights
+),
+final as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        local_departure,
+        local_actual_departure,
+        local_arrival,
+        local_actual_arrival,
+        gmt_departure,
+        gmt_actual_departure,
+        gmt_arrival,
+        gmt_actual_arrival,
+        departure_airport,
+        arrival_airport,
+        airline_code,
+        delay_mins,
+        arrival_status,
+        created_at,
+        updated_at,
+        row_number() over(
+            partition by unique_identifier
+            order by coalesce(updated_at, created_at) desc, flight_row_id desc
+        ) as rn
+    from base
+)
+select 
+    flight_row_id,
+    unique_identifier,
+    local_departure,
+    local_actual_departure,
+    local_arrival,
+    local_actual_arrival,
+    gmt_departure,
+    gmt_actual_departure,
+    gmt_arrival,
+    gmt_actual_arrival,
+    departure_airport,
+    arrival_airport,
+    airline_code,
+    delay_mins,
+    arrival_status,
+    created_at,
+    updated_at
+from final
+where rn = 1;
+```
+
