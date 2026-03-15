@@ -162,4 +162,4 @@ select
 from info_validacion
 order by total_registros desc;
 ```
-Todos los registros de "update_at" son iguales o más que los de "created_at" exceptuando cuandoi los registros de ambos son NULL.
+Todos los registros de "update_at" son iguales o más que los de "created_at" exceptuando cuando los registros de ambos son NULL.
