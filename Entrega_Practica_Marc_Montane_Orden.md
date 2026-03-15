@@ -529,4 +529,428 @@ order by total_vuelos desc;
 
 En españa despegan 128 vuelos, de estados unidos 43, de Paises Bajos 31 y de reino unido 1.
 
+## Enunciado 8
+### 1. Cuál es el delay medio por país
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            delay_mins
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            delay_mins,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        departure_airport,
+        delay_mins
+    from final
+    where rn = 1
+),
+info_country as (
+    select 
+        f.unique_identifier,
+        f.delay_mins,
+        a.country
+    from last_flights_status as f
+    left join airports as a
+        on f.departure_airport = a.airport_code
+)
+select 
+    country,
+    round(avg(delay_mins), 2) as delay_medio
+from info_country
+group by 1
+order by delay_medio desc;
+```
+
+### 2. Cuál es la distribución de estados de vuelos por país.
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            arrival_status
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            arrival_status,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        departure_airport,
+        arrival_status
+    from final
+    where rn = 1
+),
+info_country as (
+    select 
+        f.unique_identifier,
+        f.arrival_status,
+        a.country
+    from last_flights_status as f
+    left join airports as a
+        on f.departure_airport = a.airport_code
+)
+select 
+    country,
+    arrival_status,
+    count(*) as total_vuelos
+from info_country
+group by 1, 2
+order by country asc, total_vuelos desc;
+```
+
+## Enunciado 9
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            local_departure,
+            delay_mins
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            departure_airport,
+            local_departure,
+            delay_mins,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        unique_identifier,
+        departure_airport,
+        local_departure,
+        delay_mins
+    from final
+    where rn = 1
+),
+
+info_country as (
+    select 
+        f.unique_identifier,
+        f.local_departure,
+        f.delay_mins,
+        a.country
+    from last_flights_status f
+    left join airports a
+        on f.departure_airport = a.airport_code
+),
+
+info_season as (
+    select 
+        country,
+        delay_mins,
+        case 
+            when extract(month from local_departure) in (12,1,2) then 'Invierno'
+            when extract(month from local_departure) in (3,4,5) then 'Primavera'
+            when extract(month from local_departure) in (6,7,8) then 'Verano'
+            when extract(month from local_departure) in (9,10,11) then 'Otoño'
+        end as season
+    from info_country
+)
+
+select 
+    country,
+    season,
+    round(avg(delay_mins),2) as avg_delay
+from info_season
+group by 1,2
+order by country, avg_delay desc;
+```
+
+## Enunciado 10
+```sql
+with base as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        departure_airport,
+        created_at,
+        updated_at,
+        coalesce(updated_at, created_at) as effective_update_ts
+    from flights
+),
+info_updates as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        departure_airport,
+        effective_update_ts,
+        lag(effective_update_ts) over(
+            partition by unique_identifier
+            order by effective_update_ts asc, flight_row_id asc
+        ) as previous_update_ts
+    from base
+),
+info_diff as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        departure_airport,
+        effective_update_ts,
+        previous_update_ts,
+        effective_update_ts - previous_update_ts as update_frequency
+    from info_updates
+)
+select 
+    departure_airport,
+    round(avg(extract(epoch from update_frequency) / 60), 2) as avg_update_frequency_minutes
+from info_diff
+where previous_update_ts is not null
+group by 1
+order by avg_update_frequency_minutes desc;
+```
+
+## Enunciado 11
+### 1. Crea un flag is consistent.
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            airline_code,
+            departure_airport,
+            arrival_airport,
+            local_departure
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            airline_code,
+            departure_airport,
+            arrival_airport,
+            local_departure,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        airline_code,
+        departure_airport,
+        arrival_airport,
+        local_departure
+    from final
+    where rn = 1
+),
+info_parts as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        airline_code,
+        departure_airport,
+        arrival_airport,
+        local_departure,
+        split_part(unique_identifier, '-', 1) as uid_airline_code,
+        split_part(unique_identifier, '-', 2) as uid_flight_number,
+        split_part(unique_identifier, '-', 3) as uid_flight_date,
+        split_part(unique_identifier, '-', 4) as uid_departure_airport,
+        split_part(unique_identifier, '-', 5) as uid_arrival_airport
+    from last_flights_status
+)
+select 
+    flight_row_id,
+    unique_identifier,
+    airline_code,
+    departure_airport,
+    arrival_airport,
+    local_departure,
+    case
+        when airline_code = uid_airline_code
+         and to_char(local_departure, 'YYYYMMDD') = uid_flight_date
+         and departure_airport = uid_departure_airport
+         and arrival_airport = uid_arrival_airport
+        then true
+        else false
+    end as is_consistent
+from info_parts;
+```
+
+### 2. Calcula cuántos vuelos no son consistentes.
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            airline_code,
+            departure_airport,
+            arrival_airport,
+            local_departure
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            airline_code,
+            departure_airport,
+            arrival_airport,
+            local_departure,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select *
+    from final
+    where rn = 1
+),
+
+info_parts as (
+    select 
+        *,
+        split_part(unique_identifier, '-', 1) as uid_airline_code,
+        split_part(unique_identifier, '-', 3) as uid_flight_date,
+        split_part(unique_identifier, '-', 4) as uid_departure_airport,
+        split_part(unique_identifier, '-', 5) as uid_arrival_airport
+    from last_flights_status
+),
+
+consistency_check as (
+    select 
+        *,
+        case
+            when airline_code = uid_airline_code
+             and to_char(local_departure, 'YYYYMMDD') = uid_flight_date
+             and departure_airport = uid_departure_airport
+             and arrival_airport = uid_arrival_airport
+            then true
+            else false
+        end as is_consistent
+    from info_parts
+)
+
+select 
+    count(*) as vuelos_no_consistentes
+from consistency_check
+where is_consistent = false;
+```
+
+### 3. Usando la tabla airlines, muestra el nombre de la aerolínea y cuántos vuelos no consistentes tiene.
+```sql
+with last_flights_status as (
+    with base as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            airline_code,
+            departure_airport,
+            arrival_airport,
+            local_departure
+        from flights
+    ),
+    final as (
+        select 
+            flight_row_id,
+            unique_identifier,
+            airline_code,
+            departure_airport,
+            arrival_airport,
+            local_departure,
+            row_number() over(
+                partition by unique_identifier
+                order by flight_row_id desc
+            ) as rn
+        from base
+    )
+    select 
+        flight_row_id,
+        unique_identifier,
+        airline_code,
+        departure_airport,
+        arrival_airport,
+        local_departure
+    from final
+    where rn = 1
+),
+info_parts as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        airline_code,
+        departure_airport,
+        arrival_airport,
+        local_departure,
+        split_part(unique_identifier, '-', 1) as uid_airline_code,
+        split_part(unique_identifier, '-', 3) as uid_flight_date,
+        split_part(unique_identifier, '-', 4) as uid_departure_airport,
+        split_part(unique_identifier, '-', 5) as uid_arrival_airport
+    from last_flights_status
+),
+consistency_check as (
+    select 
+        flight_row_id,
+        unique_identifier,
+        airline_code,
+        case
+            when airline_code = uid_airline_code
+             and to_char(local_departure, 'YYYYMMDD') = uid_flight_date
+             and departure_airport = uid_departure_airport
+             and arrival_airport = uid_arrival_airport
+            then true
+            else false
+        end as is_consistent
+    from info_parts
+)
+select 
+    a.name as airline_name,
+    count(*) as vuelos_no_consistentes
+from consistency_check c
+left join airlines a
+    on c.airline_code = a.airline_code
+where c.is_consistent = false
+group by 1
+order by vuelos_no_consistentes desc;
+```
+
+
+
+
+
+
+
 
